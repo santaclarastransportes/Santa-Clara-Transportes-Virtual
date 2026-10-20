@@ -140,7 +140,7 @@ body{background:#f3f4f3;color:#222;font-family:Arial,sans-serif}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, serverTimestamp, collection, addDoc, getDocs, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, serverTimestamp, collection, addDoc, getDocs, getDoc, query, orderBy, where, updateDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 const firebaseConfig={apiKey:"AIzaSyCYw84UGiuoSVFw6866QN0edYf1qWliQJM",authDomain:"gtr-logistics.firebaseapp.com",projectId:"gtr-logistics",storageBucket:"gtr-logistics.firebasestorage.app",messagingSenderId:"27426100336",appId:"1:27426100336:web:e66d30bfaf3ee28a3d90b5",measurementId:"G-LHXJJM05LL"};
 const appFirebase=initializeApp(firebaseConfig);
@@ -313,10 +313,7 @@ async function loadSkins(){
   snap.forEach(d=>{
    const x=d.data(),card=document.createElement('article');card.className='shopProduct';card.style.minWidth='0';
    const price=Number(x.preco||0);const img=x.imagem?`<img src="${escapeHtml(x.imagem)}" alt="${escapeHtml(x.nome||'Item da loja')}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="productPlaceholder" style="display:none">🚚</span>`:`<span class="productPlaceholder">🚚</span>`;
-   const boughtKey=()=>`santaClaraComprado_${auth.currentUser?.uid||'anon'}`;
-   const boughtItems=()=>{try{return JSON.parse(localStorage.getItem(boughtKey())||'[]')}catch(e){return []}};
-   const alreadyBought=!!auth.currentUser&&boughtItems().includes(d.id);
-   card.innerHTML=`<div class="productVisual">${img}<div class="productDots"><i></i><i></i></div></div><div class="productInfo"><span class="productCategory">${escapeHtml(x.categoria||'Skin')}</span><h3>${escapeHtml(x.nome||'Item sem nome')}</h3><p class="productDescription">${escapeHtml(x.descricao||'Item oficial Santa Clara')}</p><div class="productBottom"><strong class="productPrice">${price>0?price.toLocaleString('pt-BR')+' STC':'GRÁTIS'}</strong><button class="buyLook" type="button" data-buy ${alreadyBought?'disabled':''} style="${alreadyBought?'background:#6b7d72;cursor:default;':''}">${alreadyBought?'COMPRADO':'COMPRAR'}</button></div><div data-purchase-status style="${alreadyBought?'display:block':'display:none'};margin-top:10px;text-align:center;font-size:12px;font-weight:950;letter-spacing:1px;color:#17663f;background:#edf4ee;border:1px solid #cfe1d3;border-radius:10px;padding:9px">✓ COMPRADO</div></div>${isAdmin()?`<div class="productAdmin"><button class="back" data-edit="${d.id}">✏️ EDITAR</button><button class="back" data-delete="${d.id}" style="color:#a12b2b">🗑️ EXCLUIR</button></div>`:''}`;
+   card.innerHTML=`<div class="productVisual">${img}<div class="productDots"><i></i><i></i></div></div><div class="productInfo"><span class="productCategory">${escapeHtml(x.categoria||'Skin')}</span><h3>${escapeHtml(x.nome||'Item sem nome')}</h3><p class="productDescription">${escapeHtml(x.descricao||'Item oficial Santa Clara')}</p><div class="productBottom"><strong class="productPrice">${price>0?price.toLocaleString('pt-BR')+' STC':'GRÁTIS'}</strong><button class="buyLook" type="button" data-buy ${purchasedIds.has(d.id)?'disabled':''} style="${purchasedIds.has(d.id)?'background:#e8eee9;color:#216b43;box-shadow:none;cursor:default':''}">${purchasedIds.has(d.id)?'✓ COMPRADO':'COMPRAR'}</button></div></div>${isAdmin()?`<div class="productAdmin"><button class="back" data-edit="${d.id}">✏️ EDITAR</button><button class="back" data-delete="${d.id}" style="color:#a12b2b">🗑️ EXCLUIR</button></div>`:''}`;
    card.querySelector('[data-buy]')?.addEventListener('click',async()=>{
     const buyBtn=card.querySelector('[data-buy]');
     if(!auth.currentUser){alert('Entre na sua conta para comprar itens da loja.');openLogin();return;}
@@ -339,9 +336,6 @@ async function loadSkins(){
       tx.set(logRef,{uid,quantidade:-price,saldoAnterior:old,saldoNovo:next,motivo:'Compra na loja: '+String(item.nome||'Item').slice(0,120),itemId:d.id,itemNome:String(item.nome||'Item').slice(0,120),criadoEm:serverTimestamp(),tipo:'compra_loja'});
       purchase={nome:item.nome||'Item',codigo:item.codigo||'',preco:price,saldo:next};
      });
-     const owned=boughtItems();if(!owned.includes(d.id)){owned.push(d.id);localStorage.setItem(boughtKey(),JSON.stringify(owned));}
-     if(buyBtn){buyBtn.textContent='COMPRADO';buyBtn.disabled=true;buyBtn.style.background='#6b7d72';buyBtn.style.cursor='default';}
-     const purchaseStatus=card.querySelector('[data-purchase-status]');if(purchaseStatus)purchaseStatus.style.display='block';
      await loadBalances();
      alert('Compra realizada com sucesso!\n\nItem: '+purchase.nome+'\nValor: '+purchase.preco.toLocaleString('pt-BR')+' STACOINS\nSaldo restante: '+purchase.saldo.toLocaleString('pt-BR')+' STACOINS');
      if(purchase.codigo){
