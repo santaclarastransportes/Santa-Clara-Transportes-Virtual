@@ -193,8 +193,17 @@ window.registrarCarga=async function(){
 window.finalizarCarga=async function(id){
  if(!auth.currentUser){openLogin();return;}if(!confirm('Deseja finalizar esta carga? Você receberá 50 STACOINS por carga finalizada.'))return;
  try{
-  const finalizarCargaSegura=httpsCallable(functions,'finalizarCargaComRecompensa');
-  const resultado=await finalizarCargaSegura({cargaId:id});
+  // Tenta a região principal e, se a função não existir nela, tenta a região padrão do Firebase.
+  let resultado;
+  try {
+   const finalizarCargaSegura=httpsCallable(functions,'finalizarCargaComRecompensa');
+   resultado=await finalizarCargaSegura({cargaId:id});
+  } catch (erroRegiao) {
+   if (erroRegiao?.code!=='functions/not-found') throw erroRegiao;
+   const functionsPadrao=getFunctions(appFirebase);
+   const finalizarCargaPadrao=httpsCallable(functionsPadrao,'finalizarCargaComRecompensa');
+   resultado=await finalizarCargaPadrao({cargaId:id});
+  }
   const dados=resultado.data||{};
   await loadCargas();if(typeof loadBalances==='function')await loadBalances();
   alert('Carga finalizada! +50 STACOINS adicionados ao seu saldo. '+(dados.contabilizada?'A carga também foi contabilizada no seu perfil.':dados.duracaoMinutos<=15?'A carga levou 15 minutos ou menos e não foi contabilizada no perfil.':'A carga ultrapassou 30 minutos e não foi contabilizada no perfil.'));
@@ -205,7 +214,8 @@ window.finalizarCarga=async function(id){
   else if(code==='functions/permission-denied'||e.message?.includes('NOT_OWNER'))alert('Você só pode finalizar cargas que registrou.');
   else if(code==='functions/not-found')alert('A carga não foi encontrada. Atualize a página e tente novamente.');
   else if(code==='functions/failed-precondition')alert('Não foi possível verificar o horário de criação da carga. Atualize a página e tente novamente.');
-  else alert('Não foi possível finalizar a carga. Confirme se a função finalizarCargaComRecompensa foi publicada no Firebase e tente novamente.');
+  else if(code==='functions/not-found')alert('A função de finalização não foi encontrada nas regiões configuradas. Publique finalizarCargaComRecompensa no Firebase Functions e tente novamente.');
+  else alert('Não foi possível finalizar a carga. Confira sua conexão e as permissões do Firebase e tente novamente.');
  }
 };
 window.loadCargas=async function(){
