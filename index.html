@@ -305,6 +305,18 @@ async function loadSkins(){
  if(!list)return;
  if(panel)panel.classList.toggle('hidden',!isAdmin());
  list.innerHTML='<p>Carregando skins...</p>';
+ // A consulta do histórico é independente: se as regras negarem a leitura,
+ // o catálogo ainda deve aparecer normalmente.
+ let purchasedIds=new Set();
+ if(auth.currentUser){
+  try{
+   const historySnap=await getDocs(query(collection(db,'santaClaraStacoinHistory'),where('uid','==',auth.currentUser.uid)));
+   historySnap.forEach(entry=>{
+    const data=entry.data();
+    if(data.tipo==='compra_loja'&&data.itemId)purchasedIds.add(data.itemId);
+   });
+  }catch(historyError){console.warn('Não foi possível carregar o histórico de compras do usuário:',historyError);}
+ }
  try{
   const snap=await getDocs(query(collection(db,'santaClaraSkins'),orderBy('criadoEm','desc')));
   const count=document.getElementById('shopProductCount');if(count)count.textContent=snap.size+' produto'+(snap.size===1?'':'s');
@@ -336,6 +348,8 @@ async function loadSkins(){
       tx.set(logRef,{uid,quantidade:-price,saldoAnterior:old,saldoNovo:next,motivo:'Compra na loja: '+String(item.nome||'Item').slice(0,120),itemId:d.id,itemNome:String(item.nome||'Item').slice(0,120),criadoEm:serverTimestamp(),tipo:'compra_loja'});
       purchase={nome:item.nome||'Item',codigo:item.codigo||'',preco:price,saldo:next};
      });
+     purchasedIds.add(d.id);
+     if(buyBtn){buyBtn.disabled=true;buyBtn.textContent='✓ COMPRADO';buyBtn.style.background='#e8eee9';buyBtn.style.color='#216b43';buyBtn.style.boxShadow='none';buyBtn.style.cursor='default';}
      await loadBalances();
      alert('Compra realizada com sucesso!\n\nItem: '+purchase.nome+'\nValor: '+purchase.preco.toLocaleString('pt-BR')+' STACOINS\nSaldo restante: '+purchase.saldo.toLocaleString('pt-BR')+' STACOINS');
      if(purchase.codigo){
@@ -343,7 +357,7 @@ async function loadSkins(){
       else{try{await navigator.clipboard.writeText(purchase.codigo);alert('Código do item copiado!');}catch(copyErr){const ta=document.createElement('textarea');ta.value=purchase.codigo;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');alert('Código do item copiado!');}catch(e){alert('Código do item: '+purchase.codigo);}ta.remove();}}
      }
     }catch(e){console.error('Erro na compra:',e);if(e.message==='INSUFFICIENT_BALANCE')alert('Saldo insuficiente para comprar este item.');else if(e.message==='ITEM_NOT_FOUND')alert('Este item não está mais disponível na loja. Atualize a página.');else if(e.message==='INVALID_PRICE'||e.message==='INVALID_BALANCE')alert('O preço ou saldo está inválido. Avise o administrador.');else alert('Não foi possível concluir a compra. Verifique as regras do Firestore para santaClaraSkins, santaClaraBalances e santaClaraStacoinHistory.');}
-    finally{if(buyBtn){buyBtn.disabled=false;buyBtn.textContent='COMPRAR';}}
+    finally{if(buyBtn&&!purchasedIds.has(d.id)){buyBtn.disabled=false;buyBtn.textContent='COMPRAR';buyBtn.style.background='';buyBtn.style.color='';buyBtn.style.boxShadow='';buyBtn.style.cursor='';}}
    });
    card.querySelector('[data-edit]')?.addEventListener('click',()=>{if(!isAdmin())return;editingSkinId=d.id;document.getElementById('skinName').value=x.nome||'';document.getElementById('skinCategory').value=x.categoria||'SCANIA';document.getElementById('skinImage').value=x.imagem||'';document.getElementById('skinCode').value=x.codigo||'';if(document.getElementById('skinPrice'))document.getElementById('skinPrice').value=Number(x.preco||0);document.getElementById('skinDescription').value=x.descricao||'';document.querySelector('#skinAdminPanel .btnGold').textContent='SALVAR ALTERAÇÕES';document.getElementById('skinAdminMsg').textContent='Editando: '+(x.nome||'Skin');window.scrollTo({top:0,behavior:'smooth'});});
    card.querySelector('[data-delete]')?.addEventListener('click',async()=>{if(!isAdmin())return;if(confirm('Excluir a skin "'+(x.nome||'Skin')+'"?')){try{await deleteDoc(doc(db,'santaClaraSkins',d.id));await loadSkins();}catch(e){console.error(e);alert('Não foi possível excluir. Confira as regras do Firestore.');}}});
