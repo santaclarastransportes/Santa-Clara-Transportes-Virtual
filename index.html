@@ -363,9 +363,10 @@ async function loadSkins(){
       if(!Number.isSafeInteger(old)||old<0)throw new Error('INVALID_BALANCE');
       if(old<price)throw new Error('INSUFFICIENT_BALANCE');
       const next=old-price;
-      tx.set(balanceRef,{uid,saldo:next,atualizadoEm:serverTimestamp(),atualizadoPor:auth.currentUser.email||''},{merge:true});
       const logRef=doc(collection(db,'santaClaraStacoinHistory'));
-      tx.set(logRef,{uid,email:auth.currentUser.email||'',nomeComprador:auth.currentUser.displayName||auth.currentUser.email||'Usuário',quantidade:-price,saldoAnterior:old,saldoNovo:next,motivo:'Compra na loja: '+String(item.nome||'Item').slice(0,120),itemId:d.id,itemNome:String(item.nome||'Item').slice(0,120),preco:price,criadoEm:serverTimestamp(),tipo:'compra_loja'});
+      // O ID do registro vincula o desconto ao histórico na mesma transação.
+      tx.set(balanceRef,{uid,saldo:next,ultimaCompraId:logRef.id,atualizadoEm:serverTimestamp(),atualizadoPor:auth.currentUser.email||''},{merge:true});
+      tx.set(logRef,{uid,email:auth.currentUser.email||'',nomeComprador:auth.currentUser.displayName||auth.currentUser.email||'Usuário',quantidade:-price,saldoAnterior:old,saldoNovo:next,motivo:'Compra na loja: '+String(item.nome||'Item').slice(0,120),itemId:d.id,itemNome:String(item.nome||'Item').slice(0,120),preco:price,criadoEm:serverTimestamp(),tipo:'compra_loja',balanceUid:uid});
       purchase={nome:item.nome||'Item',codigo:item.codigo||'',preco:price,saldo:next};
      });
      await loadBalances();
