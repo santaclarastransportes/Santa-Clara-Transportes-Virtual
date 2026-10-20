@@ -191,9 +191,22 @@ window.registrarCarga=async function(){
  }catch(e){console.error(e);if(msg)msg.textContent='Não foi possível registrar. Verifique as regras do Firestore para a coleção santaClaraCargas.';}
 };
 window.finalizarCarga=async function(id){
- if(!auth.currentUser){openLogin();return;}if(!confirm('Deseja finalizar esta carga? Só cargas com duração superior a 15 minutos e de até 30 minutos serão contabilizadas no perfil.'))return;
- try{const ref=doc(db,'santaClaraCargas',id),snap=await getDoc(ref);if(!snap.exists())throw new Error('NOT_FOUND');const d=snap.data();if(d.motoristaUid!==auth.currentUser.uid){alert('Você só pode finalizar cargas que registrou.');return;}if(d.status==='finalizada'){alert('Esta carga já foi finalizada.');return;}const agora=new Date();const criadoMs=d.criadoEm?.toMillis?.()||(d.criadoEm?.seconds?d.criadoEm.seconds*1000:0);if(!criadoMs){alert('Não foi possível verificar o horário de criação desta carga. Atualize a página e tente novamente.');return;}const duracaoMin=(agora.getTime()-criadoMs)/60000;const contabilizada=duracaoMin>15&&duracaoMin<=30;await updateDoc(ref,{status:'finalizada',finalizadoEm:serverTimestamp(),finalizadoEmTexto:agora.toLocaleString('pt-BR'),contabilizada,duracaoMinutos:Number(duracaoMin.toFixed(2))});await loadCargas();if(contabilizada)alert('Carga finalizada após '+duracaoMin.toFixed(1)+' minutos. +1 carga contabilizada no seu perfil.');else if(duracaoMin<=15)alert('Carga finalizada em '+duracaoMin.toFixed(1)+' minutos. Como levou 15 minutos ou menos, ela não será adicionada ao seu perfil.');else alert('Carga finalizada em '+duracaoMin.toFixed(1)+' minutos. Como ultrapassou 30 minutos, ela não será adicionada ao seu perfil.');
- }catch(e){console.error(e);alert('Não foi possível finalizar a carga. Verifique as regras do Firestore.');}
+ if(!auth.currentUser){openLogin();return;}if(!confirm('Deseja finalizar esta carga? Você receberá 50 STACOINS por carga finalizada.'))return;
+ try{
+  const finalizarCargaSegura=httpsCallable(functions,'finalizarCargaComRecompensa');
+  const resultado=await finalizarCargaSegura({cargaId:id});
+  const dados=resultado.data||{};
+  await loadCargas();if(typeof loadBalances==='function')await loadBalances();
+  alert('Carga finalizada! +50 STACOINS adicionados ao seu saldo. '+(dados.contabilizada?'A carga também foi contabilizada no seu perfil.':dados.duracaoMinutos<=15?'A carga levou 15 minutos ou menos e não foi contabilizada no perfil.':'A carga ultrapassou 30 minutos e não foi contabilizada no perfil.'));
+ }catch(e){
+  console.error(e);
+  const code=e.code||'';
+  if(code==='functions/already-exists'||e.message?.includes('ALREADY_FINALIZED'))alert('Esta carga já foi finalizada e os STACOINS já foram pagos.');
+  else if(code==='functions/permission-denied'||e.message?.includes('NOT_OWNER'))alert('Você só pode finalizar cargas que registrou.');
+  else if(code==='functions/not-found')alert('A carga não foi encontrada. Atualize a página e tente novamente.');
+  else if(code==='functions/failed-precondition')alert('Não foi possível verificar o horário de criação da carga. Atualize a página e tente novamente.');
+  else alert('Não foi possível finalizar a carga. Confirme se a função finalizarCargaComRecompensa foi publicada no Firebase e tente novamente.');
+ }
 };
 window.loadCargas=async function(){
  const list=document.getElementById('minhasCargasList'),resumo=document.getElementById('cargasResumo');if(!list)return;if(!auth.currentUser){list.innerHTML='<p>Entre na sua conta para ver suas cargas.</p>';if(resumo)resumo.textContent='Entre para consultar sua contagem.';return;}list.innerHTML='<p>Carregando cargas...</p>';
@@ -225,6 +238,10 @@ window.loadRegisteredDrivers=async function(){
  if(!isAdmin()){list.innerHTML='<p>Acesso restrito ao administrador.</p>';return;}
  list.innerHTML='<p>Carregando motoristas cadastrados...</p>';if(msg)msg.textContent='';
  try{
+  // Sincroniza os perfis com Firebase Authentication antes de exibir a lista.
+  // A função no servidor remove apenas perfis órfãos de santaClaraIds e cnhInterna.
+  const syncOrphans=httpsCallable(functions,'syncDeletedAuthUsers');
+  await syncOrphans({});
   const snap=await getDocs(collection(db,'santaClaraIds'));
   registeredDriverRecords=[];
   snap.forEach(d=>{const x=d.data();registeredDriverRecords.push({uid:d.id,nome:x.nome||'',apelido:x.apelido||'',cargo:x.cargo||'Motorista',cnh:x.cnh||'Não informada',email:x.email||'',identificacao:x.identificacao||'',viagensFeitas:Number(x.viagensFeitas||0),atualizadoEm:x.atualizadoEm||null});});
