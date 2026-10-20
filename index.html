@@ -205,8 +205,10 @@ window.finalizarCarga=async function(id){
   await loadCargas();
   alert('Carga finalizada com sucesso! Nenhum STACOIN foi adicionado.');
  }catch(e){
-  console.error(e);
-  alert('Não foi possível finalizar a carga. Verifique se as regras do Firestore permitem atualizar sua própria carga na coleção santaClaraCargas.');
+  console.error('Erro ao finalizar carga:', e);
+  const codigo=e && e.code ? e.code : 'sem código';
+  const detalhe=e && e.message ? e.message : String(e || 'Erro desconhecido');
+  alert('Erro ao finalizar ('+codigo+'): '+detalhe);
  }
 };
 window.loadCargas=async function(){
