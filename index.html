@@ -191,31 +191,22 @@ window.registrarCarga=async function(){
  }catch(e){console.error(e);if(msg)msg.textContent='Não foi possível registrar. Verifique as regras do Firestore para a coleção santaClaraCargas.';}
 };
 window.finalizarCarga=async function(id){
- if(!auth.currentUser){openLogin();return;}if(!confirm('Deseja finalizar esta carga? Você receberá 50 STACOINS por carga finalizada.'))return;
+ if(!auth.currentUser){openLogin();return;}
+ if(!confirm('Deseja finalizar esta carga? Nenhum STACOIN será adicionado.'))return;
  try{
-  // Tenta a região principal e, se a função não existir nela, tenta a região padrão do Firebase.
-  let resultado;
-  try {
-   const finalizarCargaSegura=httpsCallable(functions,'finalizarCargaComRecompensa');
-   resultado=await finalizarCargaSegura({cargaId:id});
-  } catch (erroRegiao) {
-   if (erroRegiao?.code!=='functions/not-found') throw erroRegiao;
-   const functionsPadrao=getFunctions(appFirebase);
-   const finalizarCargaPadrao=httpsCallable(functionsPadrao,'finalizarCargaComRecompensa');
-   resultado=await finalizarCargaPadrao({cargaId:id});
-  }
-  const dados=resultado.data||{};
-  await loadCargas();if(typeof loadBalances==='function')await loadBalances();
-  alert('Carga finalizada! +50 STACOINS adicionados ao seu saldo. '+(dados.contabilizada?'A carga também foi contabilizada no seu perfil.':dados.duracaoMinutos<=15?'A carga levou 15 minutos ou menos e não foi contabilizada no perfil.':'A carga ultrapassou 30 minutos e não foi contabilizada no perfil.'));
+  const cargaRef=doc(db,'santaClaraCargas',id);
+  const cargaSnap=await getDoc(cargaRef);
+  if(!cargaSnap.exists()){alert('Carga não encontrada. Atualize a página e tente novamente.');return;}
+  const carga=cargaSnap.data();
+  if(carga.motoristaUid!==auth.currentUser.uid){alert('Você só pode finalizar cargas que registrou.');return;}
+  if(carga.status==='finalizada'){alert('Esta carga já foi finalizada.');await loadCargas();return;}
+  const agora=new Date();
+  await updateDoc(cargaRef,{status:'finalizada',finalizadoEm:serverTimestamp(),finalizadoEmTexto:agora.toLocaleString('pt-BR'),contabilizada:true});
+  await loadCargas();
+  alert('Carga finalizada com sucesso! Nenhum STACOIN foi adicionado.');
  }catch(e){
   console.error(e);
-  const code=e.code||'';
-  if(code==='functions/already-exists'||e.message?.includes('ALREADY_FINALIZED'))alert('Esta carga já foi finalizada e os STACOINS já foram pagos.');
-  else if(code==='functions/permission-denied'||e.message?.includes('NOT_OWNER'))alert('Você só pode finalizar cargas que registrou.');
-  else if(code==='functions/not-found')alert('A carga não foi encontrada. Atualize a página e tente novamente.');
-  else if(code==='functions/failed-precondition')alert('Não foi possível verificar o horário de criação da carga. Atualize a página e tente novamente.');
-  else if(code==='functions/not-found')alert('A função de finalização não foi encontrada nas regiões configuradas. Publique finalizarCargaComRecompensa no Firebase Functions e tente novamente.');
-  else alert('Não foi possível finalizar a carga. Confira sua conexão e as permissões do Firebase e tente novamente.');
+  alert('Não foi possível finalizar a carga. Verifique se as regras do Firestore permitem atualizar sua própria carga na coleção santaClaraCargas.');
  }
 };
 window.loadCargas=async function(){
