@@ -192,26 +192,35 @@ window.registrarCarga=async function(){
 };
 window.finalizarCarga=async function(id){
  if(!auth.currentUser){openLogin();return;}
- if(!confirm('Deseja finalizar esta carga? O Banco Santa Clara receberá um valor aleatório entre 7.000 e 18.000 STACOINS.'))return;
+ if(!confirm('Deseja finalizar esta carga? O Banco Santa Clara só recebe STACOINS se a carga tiver duração entre 15 e 40 minutos, calculada entre a criação e a finalização.'))return;
  try{
   const cargaRef=doc(db,'santaClaraCargas',id);
   const bancoRef=doc(db,'santaClaraBanco','caixa');
-  let credito=0;
+  let credito=0, elegivel=false, duracaoMinutos=0;
   await runTransaction(db,async(tx)=>{
    const cargaSnap=await tx.get(cargaRef);
    if(!cargaSnap.exists())throw new Error('Carga não encontrada. Atualize a página e tente novamente.');
    const carga=cargaSnap.data();
    if(carga.motoristaUid!==auth.currentUser.uid)throw new Error('Você só pode finalizar cargas que registrou.');
-   if(carga.status==='finalizada'||carga.contabilizada===true)throw new Error('Esta carga já foi finalizada e contabilizada.');
-   const bancoSnap=await tx.get(bancoRef);
-   const saldoAtual=bancoSnap.exists()?Number(bancoSnap.data().saldo||0):0;
-   credito=Math.floor(Math.random()*11001)+7000;
+   if(carga.status==='finalizada'||carga.contabilizada===true)throw new Error('Esta carga já foi finalizada.');
+   if(!carga.criadoEm||typeof carga.criadoEm.toMillis!=='function')throw new Error('Não foi possível verificar o horário de criação desta carga.');
+   const agoraMs=Date.now();
+   duracaoMinutos=Math.floor((agoraMs-carga.criadoEm.toMillis())/60000);
+   elegivel=duracaoMinutos>=15&&duracaoMinutos<=40;
    const agora=new Date();
-   tx.update(cargaRef,{status:'finalizada',finalizadoEm:serverTimestamp(),finalizadoEmTexto:agora.toLocaleString('pt-BR'),contabilizada:true,bancoCredito:credito,bancoCreditoId:id});
-   tx.set(bancoRef,{saldo:saldoAtual+credito,ultimaCargaId:id,ultimaCargaValor:credito,atualizadoEm:serverTimestamp()},{merge:true});
+   if(elegivel){
+    const bancoSnap=await tx.get(bancoRef);
+    const saldoAtual=bancoSnap.exists()?Number(bancoSnap.data().saldo||0):0;
+    credito=Math.floor(Math.random()*11001)+7000;
+    tx.update(cargaRef,{status:'finalizada',finalizadoEm:serverTimestamp(),finalizadoEmTexto:agora.toLocaleString('pt-BR'),contabilizada:true,bancoCredito:credito,bancoCreditoId:id,duracaoMinutos,creditoBancoElegivel:true});
+    tx.set(bancoRef,{saldo:saldoAtual+credito,ultimaCargaId:id,ultimaCargaValor:credito,atualizadoEm:serverTimestamp()},{merge:true});
+   }else{
+    tx.update(cargaRef,{status:'finalizada',finalizadoEm:serverTimestamp(),finalizadoEmTexto:agora.toLocaleString('pt-BR'),contabilizada:false,duracaoMinutos,creditoBancoElegivel:false});
+   }
   });
   await loadCargas();await loadBancoSantaClara();
-  alert('Carga finalizada com sucesso! O Banco Santa Clara recebeu '+credito.toLocaleString('pt-BR')+' STACOINS.');
+  if(elegivel)alert('Carga finalizada com sucesso! Duração: '+duracaoMinutos+' minutos. O Banco Santa Clara recebeu '+credito.toLocaleString('pt-BR')+' STACOINS.');
+  else alert('Carga finalizada, mas sem crédito para o Banco Santa Clara. Duração: '+duracaoMinutos+' minutos. Só são aceitas cargas com duração entre 15 e 40 minutos.');
  }catch(e){
   console.error('Erro ao finalizar carga:',e);
   const detalhe=e&&e.message?e.message:String(e||'Erro desconhecido');
@@ -230,7 +239,7 @@ window.loadCargas=async function(){
  const list=document.getElementById('minhasCargasList'),resumo=document.getElementById('cargasResumo');if(!list)return;if(!auth.currentUser){list.innerHTML='<p>Entre na sua conta para ver suas cargas.</p>';if(resumo)resumo.textContent='Entre para consultar sua contagem.';return;}list.innerHTML='<p>Carregando cargas...</p>';
  try{const snap=await getDocs(collection(db,'santaClaraCargas'));const arr=[];snap.forEach(d=>{const x=d.data();if(x.motoristaUid===auth.currentUser.uid)arr.push({id:d.id,...x});});arr.sort((a,b)=>{const ta=a.criadoEm?.toMillis?.()||0,tb=b.criadoEm?.toMillis?.()||0;return tb-ta;});const total=arr.filter(x=>x.status==='finalizada'&&x.contabilizada===true).length;if(resumo)resumo.textContent='Total de cargas: '+arr.length+' · Cargas contabilizadas: '+total+' · Em andamento: '+arr.filter(x=>x.status!=='finalizada').length;
  if(!arr.length){list.innerHTML='<p>Você ainda não registrou nenhuma carga.</p>';return;}
- list.innerHTML=arr.map(x=>`<article class="contentCard" style="padding:14px;margin:12px 0;border:1px solid #e2e8e1;border-radius:16px"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap"><strong>${escCarga(x.origem)} → ${escCarga(x.destino)}</strong><span class="status">${x.status==='finalizada'?'FINALIZADA':'EM ANDAMENTO'}</span></div>${x.descricao?`<p style="margin:8px 0">${escCarga(x.descricao)}</p>`:''}<div style="line-height:1.8;font-size:14px;color:#64746b"><div><strong>Criada:</strong> ${escCarga(x.criadoEmTexto||dataCargaLabel(x.criadoEm))}</div><div><strong>Finalizada:</strong> ${x.status==='finalizada'?escCarga(x.finalizadoEmTexto||dataCargaLabel(x.finalizadoEm)):'Ainda não finalizada'}</div></div>${x.status!=='finalizada'?`<div class="formActions"><button class="btn btnGold" onclick="finalizarCarga('${x.id}')">✓ FINALIZAR CARGA</button></div>`:'<p style="font-weight:800;color:#18583d;margin-bottom:0">✓ 1 carga contabilizada no perfil</p>'}</article>`).join('');
+ list.innerHTML=arr.map(x=>`<article class="contentCard" style="padding:14px;margin:12px 0;border:1px solid #e2e8e1;border-radius:16px"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap"><strong>${escCarga(x.origem)} → ${escCarga(x.destino)}</strong><span class="status">${x.status==='finalizada'?'FINALIZADA':'EM ANDAMENTO'}</span></div>${x.descricao?`<p style="margin:8px 0">${escCarga(x.descricao)}</p>`:''}<div style="line-height:1.8;font-size:14px;color:#64746b"><div><strong>Criada:</strong> ${escCarga(x.criadoEmTexto||dataCargaLabel(x.criadoEm))}</div><div><strong>Finalizada:</strong> ${x.status==='finalizada'?escCarga(x.finalizadoEmTexto||dataCargaLabel(x.finalizadoEm)):'Ainda não finalizada'}</div></div>${x.status!=='finalizada'?`<div class="formActions"><button class="btn btnGold" onclick="finalizarCarga('${x.id}')">✓ FINALIZAR CARGA</button></div>`:(x.creditoBancoElegivel===true?`<p style="font-weight:800;color:#18583d;margin-bottom:0">✓ Banco creditado: ${Number(x.bancoCredito||0).toLocaleString('pt-BR')} STACOINS (${escCarga(String(x.duracaoMinutos??'—'))} min)</p>`:`<p style="font-weight:800;color:#946200;margin-bottom:0">Carga finalizada sem crédito bancário (${escCarga(String(x.duracaoMinutos??'—'))} min). Regra: 15 a 40 minutos.</p>`)}</article>`).join('');
  }catch(e){console.error(e);list.innerHTML='<p>Não foi possível carregar as cargas. Confira as regras do Firestore para a coleção santaClaraCargas.</p>';if(resumo)resumo.textContent='Erro ao consultar contagem.';}
 };
 window.loadMyProfile=async function(){const box=document.getElementById('profileInfo');if(!box)return;if(!auth.currentUser){box.innerHTML='<strong>Nenhuma conta conectada.</strong><p>Entre na sua conta para visualizar seu perfil.</p>';return;}box.innerHTML='<p>Carregando dados vinculados à sua conta...</p>';try{const d=await getMyIdRecord();const cargaSnap=await getDocs(collection(db,'santaClaraCargas'));let cargasFinalizadas=0;cargaSnap.forEach(cd=>{const cx=cd.data();if(cx.motoristaUid===auth.currentUser.uid&&cx.status==='finalizada'&&cx.contabilizada===true)cargasFinalizadas++;});const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));if(!d){box.innerHTML='<strong>Você ainda não criou seu Santa Clara ID.</strong><p>Seu perfil será vinculado automaticamente depois que você preencher e salvar o formulário de ID.</p>';return;}box.innerHTML=`<span class="status">PERFIL VINCULADO</span><h3 style="margin:12px 0 6px">${esc(d.apelido||d.nome||'Motorista')}</h3><div style="line-height:1.9;overflow-wrap:anywhere"><div><strong>Nome:</strong> ${esc(d.nome||'—')}</div><div><strong>Apelido:</strong> ${esc(d.apelido||'—')}</div><div><strong>E-mail:</strong> ${esc(auth.currentUser.email||d.email||'—')}</div><div><strong>Cargo:</strong> ${esc(d.cargo||'—')}</div><div><strong>CNH:</strong> ${esc(d.cnh||'—')}</div><div><strong>Santa Clara ID:</strong> ${esc(d.identificacao||'—')}</div><div><strong>Cargas finalizadas:</strong> ${cargasFinalizadas}</div></div><div style="margin-top:14px"><button class="btn btnGold" onclick="openView('cargas')">🚚 MINHAS CARGAS</button></div>`;}catch(e){console.error(e);box.innerHTML='<strong>Não foi possível carregar seu perfil.</strong><p>Verifique se as regras permitem que cada usuário leia seu próprio documento em santaClaraIds.</p>';}};
