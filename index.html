@@ -190,17 +190,29 @@ window.registrarCarga=async function(){
   document.getElementById('cargaOrigem').value='';document.getElementById('cargaDestino').value='';document.getElementById('cargaDescricao').value='';if(msg)msg.textContent='Carga registrada com sucesso!';await loadCargas();
  }catch(e){console.error(e);if(msg)msg.textContent='Não foi possível registrar. Verifique as regras do Firestore para a coleção santaClaraCargas.';}
 };
+function mostrarComprovanteCarga({registrado,valor=0,duracao=0,origem='',destino='',dataHora=new Date()}){
+ const anterior=document.getElementById('scReceiptOverlay');if(anterior)anterior.remove();
+ const data=dataHora.toLocaleDateString('pt-BR'),hora=dataHora.toLocaleTimeString('pt-BR');
+ const titulo=registrado?'COMPROVANTE DE CRÉDITO':'COMPROVANTE DE FINALIZAÇÃO';
+ const status=registrado?'PAGAMENTO REGISTRADO':'PAGAMENTO NÃO REGISTRADO';
+ const dinheiro=registrado?'#176b45':'#a16207';
+ const detalhe=registrado?'Crédito registrado com sucesso no Banco Santa Clara.':'Você não entregou no horário. O pagamento não foi registrado.';
+ const overlay=document.createElement('div');overlay.id='scReceiptOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(10,20,14,.72);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';
+ overlay.innerHTML=`<div role="dialog" aria-modal="true" aria-label="${titulo}" style="width:min(420px,100%);max-height:92vh;overflow:auto;background:#f1f3f5;border-radius:20px;padding:12px;color:#202820;font-family:Arial,sans-serif;box-shadow:0 18px 60px #0005"><div style="background:#123d2d;color:white;border-radius:12px;padding:20px 14px;text-align:center"><div style="font-size:27px">▤</div><div style="font-size:25px;font-weight:900;letter-spacing:1px;margin-top:5px">SANTA CLARA</div><div style="font-weight:700;letter-spacing:2px;font-size:12px">TRANSPORTES</div><div style="height:1px;background:#ffffff66;margin:14px 0"></div><div style="font-weight:900;font-size:16px">${titulo}</div><div style="font-size:10px;color:#d8e9df;margin-top:5px;letter-spacing:1px">REGISTRO DE OPERAÇÃO • STACOINS</div></div><div style="background:white;border-radius:12px;padding:20px 16px;margin-top:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;color:#59636e"><span>Situação do pagamento</span><b style="background:${registrado?'#d9f4e2':'#fff0ce'};color:${dinheiro};padding:7px 9px;border-radius:20px;text-align:center">${status}</b></div><div style="border-top:1px dashed #cdd5d0;margin:16px 0"></div><div style="text-align:center;font-size:11px;color:#59636e;letter-spacing:.6px">${registrado?'VALOR CREDITADO':'CRÉDITO NO BANCO SANTA CLARA'}</div><div style="text-align:center;font-size:clamp(25px,7vw,32px);font-weight:900;color:${dinheiro};margin:7px 0 4px">${registrado?'+ '+Number(valor).toLocaleString('pt-BR')+' STACOINS':'0 STACOINS'}</div><div style="text-align:center;font-size:12px;color:#59636e">${registrado?'Crédito registrado com sucesso':'Nenhum crédito foi registrado'}</div><div style="background:${registrado?'#e9f7ee':'#fff5df'};border-radius:9px;padding:12px;margin-top:16px;color:${registrado?'#176b45':'#805b19'};font-size:13px;line-height:1.5"><b>${registrado?'✓ Banco Santa Clara':'! '+status}</b><div style="margin-top:4px">${detalhe}</div></div><div style="border-top:1px dashed #cdd5d0;margin:16px 0"></div><div style="font-size:13px;line-height:2"><div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#59636e">Origem</span><b style="text-align:right">${origem||'—'}</b></div><div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#59636e">Destino</span><b style="text-align:right">${destino||'—'}</b></div><div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#59636e">Duração da carga</span><b>${duracao} min</b></div><div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#59636e">Data</span><b>${data}</b></div><div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#59636e">Horário</span><b>${hora}</b></div></div><div style="border-top:1px dashed #cdd5d0;margin:16px 0 12px"></div><div style="font-size:10px;color:#59636e;text-align:center;line-height:1.5">Documento eletrônico de registro interno<br>Santa Clara Transportes • Sistema STACOINS<br><span style="font-weight:700">Não é uma nota fiscal tributária.</span></div><button id="scReceiptClose" style="width:100%;margin-top:16px;border:0;border-radius:10px;padding:13px;background:#17683f;color:white;font-weight:900;font-size:14px">FECHAR COMPROVANTE</button></div></div>`;
+ document.body.appendChild(overlay);document.getElementById('scReceiptClose').onclick=()=>overlay.remove();overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+}
 window.finalizarCarga=async function(id){
  if(!auth.currentUser){openLogin();return;}
  if(!confirm('Deseja finalizar esta carga? O Banco Santa Clara só recebe STACOINS se a carga tiver duração entre 15 e 40 minutos, calculada entre a criação e a finalização.'))return;
  try{
   const cargaRef=doc(db,'santaClaraCargas',id);
   const bancoRef=doc(db,'santaClaraBanco','caixa');
-  let credito=0, elegivel=false, duracaoMinutos=0;
+  let credito=0, elegivel=false, duracaoMinutos=0, origemCarga='', destinoCarga='';
   await runTransaction(db,async(tx)=>{
    const cargaSnap=await tx.get(cargaRef);
    if(!cargaSnap.exists())throw new Error('Carga não encontrada. Atualize a página e tente novamente.');
    const carga=cargaSnap.data();
+   origemCarga=String(carga.origem||'');destinoCarga=String(carga.destino||'');
    if(carga.motoristaUid!==auth.currentUser.uid)throw new Error('Você só pode finalizar cargas que registrou.');
    if(carga.status==='finalizada'||carga.contabilizada===true)throw new Error('Esta carga já foi finalizada.');
    if(!carga.criadoEm||typeof carga.criadoEm.toMillis!=='function')throw new Error('Não foi possível verificar o horário de criação desta carga.');
@@ -220,8 +232,7 @@ window.finalizarCarga=async function(id){
    }
   });
   await loadCargas();await loadBancoSantaClara();
-  if(elegivel)alert('Carga finalizada com sucesso! Duração: '+duracaoMinutos+' minutos. O Banco Santa Clara recebeu '+credito.toLocaleString('pt-BR')+' STACOINS.');
-  else alert('PAGAMENTO NÃO REGISTRADO\n\nVocê não entregou no horário. O pagamento não foi registrado.\n\nDuração da carga: '+duracaoMinutos+' minutos.');
+  mostrarComprovanteCarga({registrado:elegivel,valor:credito,duracao:duracaoMinutos,origem:origemCarga,destino:destinoCarga,dataHora:new Date()});
  }catch(e){
   console.error('Erro ao finalizar carga:',e);
   const detalhe=e&&e.message?e.message:String(e||'Erro desconhecido');
