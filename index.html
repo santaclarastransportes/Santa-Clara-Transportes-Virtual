@@ -205,8 +205,9 @@ window.finalizarCarga=async function(id){
    if(carga.status==='finalizada'||carga.contabilizada===true)throw new Error('Esta carga já foi finalizada.');
    if(!carga.criadoEm||typeof carga.criadoEm.toMillis!=='function')throw new Error('Não foi possível verificar o horário de criação desta carga.');
    const agoraMs=Date.now();
-   duracaoMinutos=Math.floor((agoraMs-carga.criadoEm.toMillis())/60000);
-   elegivel=duracaoMinutos>=15&&duracaoMinutos<=40;
+   const duracaoMs=agoraMs-carga.criadoEm.toMillis();
+   duracaoMinutos=Math.floor(duracaoMs/60000);
+   elegivel=duracaoMs>=900000&&duracaoMs<=2400000;
    const agora=new Date();
    if(elegivel){
     const bancoSnap=await tx.get(bancoRef);
