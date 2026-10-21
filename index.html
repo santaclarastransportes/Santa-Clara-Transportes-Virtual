@@ -221,7 +221,7 @@ window.finalizarCarga=async function(id){
   });
   await loadCargas();await loadBancoSantaClara();
   if(elegivel)alert('Carga finalizada com sucesso! Duração: '+duracaoMinutos+' minutos. O Banco Santa Clara recebeu '+credito.toLocaleString('pt-BR')+' STACOINS.');
-  else alert('Carga finalizada, mas sem crédito para o Banco Santa Clara. Duração: '+duracaoMinutos+' minutos. Só são aceitas cargas com duração entre 15 e 40 minutos.');
+  else alert('PAGAMENTO NÃO REGISTRADO\n\nVocê não entregou no horário. O pagamento não foi registrado.\n\nDuração da carga: '+duracaoMinutos+' minutos.');
  }catch(e){
   console.error('Erro ao finalizar carga:',e);
   const detalhe=e&&e.message?e.message:String(e||'Erro desconhecido');
