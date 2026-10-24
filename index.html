@@ -639,7 +639,7 @@ window.depositSalary=async function(){
   driversSnap.forEach(d=>{const x=d.data();drivers.push({uid:d.id,nome:x.apelido||x.nome||x.email||'Motorista'});});
   if(!drivers.length){if(whatsappTab)whatsappTab.close();msg.textContent='Nenhum motorista cadastrado em santaClaraIds. Nenhum saldo foi alterado.';return;}
   const total=drivers.length*1500;
-  if(!confirm('Serão pagos '+drivers.length+' motoristas. Total: '+total.toLocaleString('pt-BR')+' STACOINS, descontados do Banco Santa Clara. Confirmar pagamento?')){if(whatsappTab)whatsappTab.close();msg.textContent='Depósito cancelado pelo administrador. Nenhum saldo foi alterado.';return;}
+  // A confirmação inicial já foi feita; não pedir uma segunda confirmação para evitar cancelamento acidental.
   msg.textContent='Depositando salário para '+drivers.length+' motoristas...';
   const bancoRef=doc(db,'santaClaraBanco','caixa');
   const balanceRefs=drivers.map(d=>({driver:d,ref:doc(db,'santaClaraBalances',d.uid),log:doc(collection(db,'santaClaraStacoinHistory'))}));
