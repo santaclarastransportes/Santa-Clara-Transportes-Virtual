@@ -841,4 +841,18 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
  <button type="button" onclick="openView('perfil')"><span>♙</span>Perfil</button>
 </nav>
 
+
+<style id="sc-rankin-contraste-visivel">
+/* Contraste reforçado do ranking para leitura em telas de celular */
+#subPage .scRankCard, .scRankCard { background: linear-gradient(145deg,#f4fff8,#e3f8ed) !important; color:#10251c !important; border:1px solid #25a66a !important; box-shadow:0 8px 24px rgba(0,60,35,.12) !important; }
+#subPage .scRankCard h3, .scRankCard h3 { color:#075b38 !important; }
+#subPage .scRankCard p, .scRankCard p { color:#315b49 !important; }
+#subPage .scRankRow, .scRankRow { color:#14291f !important; border-top:1px solid #b7ddc9 !important; }
+#subPage .scRankNum, .scRankNum { color:#ffffff !important; background:#087b50 !important; }
+#subPage .scRankName, .scRankName { color:#14291f !important; }
+#subPage .scRankValue, .scRankValue { color:#075b38 !important; }
+#subPage .scRankEmpty, .scRankEmpty { background:#d8f4e4 !important; color:#173d2b !important; border:1px solid #a6d9bc !important; }
+@media(max-width:900px){#subPage .scRankCard,.scRankCard{padding:16px 14px !important}}
+</style>
+
 </body></html>
