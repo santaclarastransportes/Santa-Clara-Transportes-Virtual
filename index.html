@@ -814,12 +814,20 @@ window.saveSkin=async function(){
 // Acesso ao Criar Nota: exige sessão autenticada e Santa Clara ID com cargo de motorista.
 window.scNoteHasDriverAccess=async function(){
  try{
-  if(!auth.currentUser) return false;
-  const profile=await getMyIdRecord();
-  if(!profile) return false;
+  const user=window.auth?.currentUser;
+  if(!user) return false;
+  // No site, os motoristas cadastrados são os perfis existentes em santaClaraIds.
+  const profileSnap=await getDoc(doc(db,'santaClaraIds',user.uid));
+  if(!profileSnap.exists()) return false;
+  const profile=profileSnap.data()||{};
   const role=String(profile.cargo||profile.funcao||profile.role||'').trim().toLowerCase();
-  if(/admin|administrador/.test(role)) return false;
-  return /motorista|driver/.test(role);
+  const email=String(user.email||profile.email||'').trim().toLowerCase();
+  if(/admin|administrador/.test(role) || email===String(ADMIN_EMAIL||'').trim().toLowerCase()) return false;
+  // Exclui administradores delegados e libera qualquer perfil de motorista registrado,
+  // mesmo que o campo cargo tenha uma descrição diferente de "Motorista".
+  const adminSnap=await getDoc(doc(db,'santaClaraAdmins',user.uid)).catch(()=>null);
+  if(adminSnap?.exists()) return false;
+  return true;
  }catch(err){console.warn('Não foi possível verificar o acesso ao Criar Nota:',err);return false;}
 };
 
@@ -911,9 +919,17 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
 (function(){
  const $=id=>document.getElementById(id), modal=$('scNoteModal'), fab=$('scCreateNoteFab');
  fab.style.display='none';
- window.scNoteUpdateAccess=async function(){fab.style.display='none';const allowed=await window.scNoteHasDriverAccess?.();if(allowed)fab.style.display='block';};
+ window.scNoteUpdateAccess=async function(){
+   fab.style.display='none';
+   try{const allowed=await window.scNoteHasDriverAccess?.();if(allowed)fab.style.display='block';}
+   catch(e){console.warn('Falha ao verificar botão Criar Nota:',e);}
+ };
+ // Reconfere após o módulo Firebase terminar de inicializar e quando a sessão mudar.
  window.scNoteUpdateAccess();
  window.addEventListener('pageshow',()=>window.scNoteUpdateAccess());
+ window.addEventListener('focus',()=>window.scNoteUpdateAccess());
+ let scNoteRetries=0;
+ const scNoteRetry=setInterval(()=>{window.scNoteUpdateAccess();if(++scNoteRetries>=12)clearInterval(scNoteRetry);},1000);
  const cities=['Itapetuna','Nova Macaé','Águas Velhas','Fazenda Areia Dourada','Cruz do Oeste','Cooperativa Agrogrão','Curitiba','Registro','Lages','Lauro Muller'];
  const companies=['Transportadora Rota Sul','Logística Brasil Cargo','Expresso Continental','TransVale Cargas','Rodocerto Transportes','Carga Forte Logística','Estrada Real Transportes','Sul Minas Cargas','Veloz Transportadora','TransBrasil Distribuição','Cooperativa de Cargas União','Armazéns Central','Distribuidora Horizonte','AgroCarga Logística','Posto e Transportes Imperial','Madeireira Pinhal','Comercial Santa Rita','Indústria Vale Verde','Centro Logístico Nacional','Transportes Serra Azul','Mercado União','Atacadão Central','Frigorífico Bom Corte','Cerealista Campo Forte','Porto Seco Logística','Autopeças Estradão','Fábrica Nova Era','Depósito São Miguel','Rede Econômica','Construtora Horizonte'];
  const firstNames=['João','Pedro','Lucas','Gabriel','Rafael','Marcos','Carlos','Mateus','Bruno','André','Felipe','Diego','Thiago','Eduardo','Vinícius','Gustavo','Daniel','Leonardo','Fernando','Roberto','Ana','Maria','Juliana','Camila','Beatriz','Larissa','Patrícia','Fernanda','Amanda','Carolina'];
