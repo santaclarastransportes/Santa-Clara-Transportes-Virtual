@@ -879,7 +879,7 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
 
 
 <style id="sc-notas-style">
-#scCreateNoteFab{display:none;visibility:visible!important;opacity:1!important;position:fixed!important;right:16px;bottom:105px;z-index:2147483647!important;border:2px solid #ffffff;border-radius:18px;background:linear-gradient(135deg,#16834a,#0d512b);color:#fff;padding:16px 20px;font-weight:900;font-size:15px;box-shadow:0 8px 28px #123d2480;cursor:pointer;pointer-events:auto!important}
+#scCreateNoteFab{display:block!important;visibility:visible!important;opacity:1!important;position:fixed!important;right:16px;bottom:105px;z-index:2147483647!important;border:2px solid #ffffff;border-radius:18px;background:linear-gradient(135deg,#16834a,#0d512b);color:#fff;padding:16px 20px;font-weight:900;font-size:15px;box-shadow:0 8px 28px #123d2480;cursor:pointer;pointer-events:auto!important}
 #scNoteModal{display:none;position:fixed;inset:0;z-index:9999;background:#101813b8;padding:14px;overflow:auto;align-items:flex-start;justify-content:center}
 #scNoteModal.sc-open{display:flex}
 .sc-note-panel{width:min(760px,100%);margin:auto;background:#f4f5f4;border-radius:22px;padding:20px;color:#202520;box-shadow:0 20px 70px #0005}
@@ -918,11 +918,12 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
 <script id="sc-notas-script">
 (function(){
  const $=id=>document.getElementById(id), modal=$('scNoteModal'), fab=$('scCreateNoteFab');
- fab.style.display='none';
- window.scNoteUpdateAccess=async function(){
-   fab.style.display='none';
-   try{const allowed=await window.scNoteHasDriverAccess?.();if(allowed)fab.style.display='block';}
-   catch(e){console.warn('Falha ao verificar botão Criar Nota:',e);}
+ fab.style.display='block';
+ window.scNoteUpdateAccess=function(){
+   // O botão Criar Nota fica visível para todos; não depende de cadastro ou cargo.
+   fab.style.display='block';
+   fab.style.visibility='visible';
+   fab.style.opacity='1';
  };
  // Reconfere após o módulo Firebase terminar de inicializar e quando a sessão mudar.
  window.scNoteUpdateAccess();
