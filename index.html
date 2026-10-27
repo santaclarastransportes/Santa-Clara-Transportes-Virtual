@@ -950,12 +950,35 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
    randomProduct();
    city();
  }
+ function randomProduct(){
+   const products=[
+    {name:'Morangos frescos',desc:'Frutas selecionadas acondicionadas em caixas ventiladas, protegidas contra impactos e mantidas em condições adequadas de conservação.',pack:'Caixas ventiladas'},
+    {name:'Tomates para distribuição',desc:'Tomates classificados e acomodados em caixas resistentes para reduzir amassamentos durante o transporte.',pack:'Caixas plásticas'},
+    {name:'Milho em grãos',desc:'Grãos agrícolas secos, destinados ao armazenamento e à distribuição, transportados em embalagem apropriada e protegidos da umidade.',pack:'Sacos industriais'},
+    {name:'Café torrado',desc:'Pacotes de café torrado e embalado, organizados em volumes para facilitar a movimentação e preservar a integridade do produto.',pack:'Caixas de papelão'},
+    {name:'Peças automotivas',desc:'Componentes automotivos separados e acondicionados para evitar atrito, danos e perda de peças durante o deslocamento.',pack:'Caixas reforçadas'},
+    {name:'Fertilizante agrícola',desc:'Insumo agrícola ensacado, com volumes organizados e protegidos contra rasgos e contato com umidade.',pack:'Sacos selados'},
+    {name:'Arroz beneficiado',desc:'Produto alimentício embalado em fardos, preparado para distribuição comercial e protegido contra contaminação e umidade.',pack:'Fardos lacrados'},
+    {name:'Material de construção',desc:'Materiais de obra agrupados e acomodados para transporte seguro, com distribuição de peso adequada na carga.',pack:'Paletes e cintas'},
+    {name:'Ração animal',desc:'Ração ensacada para alimentação animal, organizada em lotes e protegida para manter as embalagens íntegras durante a entrega.',pack:'Sacos laminados'},
+    {name:'Produtos de limpeza',desc:'Itens de limpeza embalados e separados por volume, acondicionados para reduzir vazamentos e facilitar a conferência no recebimento.',pack:'Caixas lacradas'}
+   ];
+   const p=pick(products);$('scNoteProduct').value=p.name;$('scNoteDescription').value=p.desc;$('scNotePackaging').value=p.pack;
+ }
+ function signatureName(name){
+   const clean=String(name||'Santa Clara').trim().replace(/\s+/g,' ');
+   if(!clean)return 'Santa Clara';
+   const parts=clean.split(' ');
+   return parts.length>2?parts.slice(0,2).join(' '):clean;
+ }
  function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
  async function open(){modal.classList.add('sc-open');document.body.style.overflow='hidden';if(!$('scNoteDate').value)$('scNoteDate').value=today();if(!$('scNoteDestination').value)randomizeNote();const name=await window.scNoteGetDriverName?.();if(name){$('scNoteDriver').value=name;$('scNoteDriver').readOnly=true;$('scNoteDriver').title='Nome carregado automaticamente do seu Santa Clara ID';}else{$('scNoteDriver').readOnly=false;$('scNoteDriver').placeholder='Entre na conta e cadastre seu Santa Clara ID para preencher automaticamente';}}
  function close(){modal.classList.remove('sc-open');document.body.style.overflow='';}
  $('scCreateNoteFab').addEventListener('click',open);$('scNoteClose').addEventListener('click',close);modal.addEventListener('click',e=>{if(e.target===modal)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal.classList.contains('sc-open'))close();});$('scNoteNewCity').addEventListener('click',randomizeNote);
  function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
- $('scNoteGenerate').addEventListener('click',()=>{
+ $('scNoteGenerate').addEventListener('click',(event)=>{
+  event.preventDefault();event.stopPropagation();
+  try {
   const driver=$('scNoteDriver').value.trim();if(!driver){$('scNoteMessage').textContent='Entre na conta e cadastre seu Santa Clara ID para preencher o motorista automaticamente, ou informe o nome.';$('scNoteDriver').focus();return;}
   randomizeNote();
   const type=$('scNoteType').value,date=$('scNoteDate').value||today(),qty=Math.max(1,Number($('scNoteQty').value)||1),unit=Math.max(0,Number($('scNoteUnitWeight').value)||0),total=qty*unit;
@@ -964,6 +987,7 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
   const dateBR=date.split('-').reverse().join('/');
   $('scNotePreview').innerHTML='<article class="sc-note-doc"><header class="sc-doc-head">'+(logo?'<img class="sc-doc-logo" src="'+logo+'" alt="Logo Santa Clara Transportes">':'<div style="font-size:24px;font-weight:bold">SANTA CLARA</div>')+'<h2>SANTA CLARA TRANSPORTES</h2><strong>'+safe(type)+' — SANTA CLARA TRANSPORTES</strong></header><p><b>EMPRESA:</b> Santa Clara Transportes<br><b>DOCUMENTO:</b> '+safe(type)+'<br><b>DESTINO:</b> '+safe($('scNoteDestination').value)+'<br><b>Nº DA NOTA:</b> '+safe(num)+'<br><b>REFERÊNCIA FISCAL:</b> '+safe($('scNoteFiscal').value||'Não informada')+'</p><p><b>DATA:</b> '+safe(dateBR)+'<br><b>MOTORISTA:</b> '+safe(driver)+'</p><h3>DADOS DOS PRODUTOS</h3><table><thead><tr><th>Produto</th><th>Descrição</th><th>Quantidade</th><th>Peso unit. (kg)</th><th>Peso total (kg)</th><th>Volume (m³)</th><th>Embalagem</th></tr></thead><tbody><tr><td>'+safe($('scNoteProduct').value)+'</td><td>'+safe($('scNoteDescription').value)+'</td><td>'+qty.toLocaleString('pt-BR')+'</td><td>'+unit.toLocaleString('pt-BR')+'</td><td>'+total.toLocaleString('pt-BR')+'</td><td>'+safe($('scNoteVolume').value)+'</td><td>'+safe($('scNotePackaging').value)+'</td></tr></tbody></table><h3>RESUMO DA ENTREGA</h3><p>Quantidade total de volumes: '+qty.toLocaleString('pt-BR')+'<br>Peso bruto total: '+total.toLocaleString('pt-BR')+' kg<br>Peso líquido total: '+total.toLocaleString('pt-BR')+' kg<br>Volume total: '+safe($('scNoteVolume').value)+' m³</p><h3>ASSINATURAS</h3><div class="sc-doc-sign"><div class="sc-doc-line">Assinatura simulada — responsável pela entrega:<br><span class="sc-signature">'+safe(signatureName($('scNoteOrigin').value))+'</span><b>'+safe($('scNoteOrigin').value)+'</b></div><div class="sc-doc-line">Assinatura simulada — responsável pelo recebimento:<br><span class="sc-signature">'+safe(signatureName($('scNoteReceiver').value.split(' — ')[0]))+'</span><b>'+safe($('scNoteReceiver').value)+'</b></div></div><div class="sc-doc-line" style="max-width:230px">Data do recebimento: '+safe(dateBR)+'</div><div class="sc-doc-stamp">GESTÃO SANTA CLARA<br><small>LIBERAÇÃO AUTOMÁTICA</small><hr style="border:0;border-top:1px solid #176b3a">✓ NOTA LIBERADA<br><small>Boa viagem! 🙏</small></div></article>';
   $('scNotePreview').style.display='block';$('scNotePrint').style.display='inline-block';$('scNoteMessage').textContent='Nota gerada. Toque em “Baixar nota em PNG” para salvar a imagem.';
+  } catch(err) { console.error('Erro ao montar nota:',err); $('scNoteMessage').textContent='Não foi possível montar a nota: '+String(err&&err.message||err); }
  });
  $('scNotePrint').addEventListener('click',async()=>{const note=document.querySelector('#scNotePreview .sc-note-doc');if(!note){$('scNoteMessage').textContent='Gere a nota primeiro.';return;}if(typeof window.html2canvas!=='function'){$('scNoteMessage').textContent='O gerador de imagem não carregou. Confira a internet e recarregue a página.';return;}const btn=$('scNotePrint');btn.disabled=true;btn.textContent='⏳ GERANDO PNG...';let clone;try{clone=note.cloneNode(true);clone.style.width='900px';clone.style.maxWidth='900px';clone.style.position='fixed';clone.style.left='-10000px';clone.style.top='0';clone.style.background='#fff';clone.style.padding='24px';clone.style.boxSizing='border-box';clone.querySelectorAll('img').forEach(img=>{const brand=document.createElement('div');brand.textContent='SANTA CLARA';brand.style.cssText='font-size:24px;font-weight:bold;color:#176b3a;text-align:center;padding:14px';img.replaceWith(brand);});document.body.appendChild(clone);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const canvas=await window.html2canvas(clone,{scale:2,backgroundColor:'#ffffff',useCORS:false,allowTaint:false,logging:false,width:clone.scrollWidth,height:clone.scrollHeight,windowWidth:1000});const link=document.createElement('a');link.download='nota-santa-clara-'+String($('scNoteNumber').value||'nota').replace(/[^a-z0-9_-]/gi,'')+'.png';link.href=canvas.toDataURL('image/png');link.style.display='none';document.body.appendChild(link);link.click();link.remove();$('scNoteMessage').textContent='Imagem PNG gerada! Se o download não aparecer, permita downloads para este site.';}catch(e){console.error('Erro ao gerar PNG da nota:',e);$('scNoteMessage').textContent='Falha ao gerar PNG. Recarregue o site e tente novamente. '+String(e&&e.message||e).slice(0,100);}finally{if(clone)clone.remove();btn.disabled=false;btn.textContent='🖼️ BAIXAR NOTA EM PNG';}});
 })();
