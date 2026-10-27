@@ -853,6 +853,11 @@ window.adjustStacoins=window.adjustStacoins;
 window.depositSalary=window.depositSalary;
 window.setAdminRole=window.setAdminRole;
 window.login=window.login;
+// Integração segura: o segredo do bot fica apenas no Firebase Functions, nunca no HTML.
+window.scPublishNoteToDiscord=async function(payload){
+ const publish=httpsCallable(functions,'publishNoteToDiscord');
+ return await publish(payload);
+};
 window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn'&&auth.currentUser){e.preventDefault();try{await signOut(auth);}catch(err){console.error(err);}}});
 </script>
 
@@ -915,6 +920,7 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
   <div id="scNotePreview"></div>
  </div>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" referrerpolicy="no-referrer"></script>
 <script id="sc-notas-script">
 (function(){
  const $=id=>document.getElementById(id), modal=$('scNoteModal'), fab=$('scCreateNoteFab');
@@ -952,7 +958,7 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
  function close(){modal.classList.remove('sc-open');document.body.style.overflow='';}
  $('scCreateNoteFab').addEventListener('click',open);$('scNoteClose').addEventListener('click',close);modal.addEventListener('click',e=>{if(e.target===modal)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal.classList.contains('sc-open'))close();});$('scNoteNewCity').addEventListener('click',randomizeNote);
  function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
- $('scNoteGenerate').addEventListener('click',()=>{
+ $('scNoteGenerate').addEventListener('click',async()=>{
   const driver=$('scNoteDriver').value.trim();if(!driver){$('scNoteMessage').textContent='Informe o nome do motorista para gerar a nota.';$('scNoteDriver').focus();return;}
   randomizeNote();
   const type=$('scNoteType').value,date=$('scNoteDate').value||today(),qty=Math.max(1,Number($('scNoteQty').value)||1),unit=Math.max(0,Number($('scNoteUnitWeight').value)||0),total=qty*unit;
@@ -960,7 +966,21 @@ window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn
   const logoEl=document.querySelector('.topbar .brand img, .brand img, .homeLogo');const logo=logoEl?logoEl.src:'';
   const dateBR=date.split('-').reverse().join('/');
   $('scNotePreview').innerHTML='<article class="sc-note-doc"><header class="sc-doc-head">'+(logo?'<img class="sc-doc-logo" src="'+logo+'" alt="Logo Santa Clara Transportes">':'<div style="font-size:24px;font-weight:bold">SANTA CLARA</div>')+'<h2>SANTA CLARA TRANSPORTES</h2><strong>'+safe(type)+' — SANTA CLARA TRANSPORTES</strong></header><p><b>EMPRESA:</b> Santa Clara Transportes<br><b>DOCUMENTO:</b> '+safe(type)+'<br><b>DESTINO:</b> '+safe($('scNoteDestination').value)+'<br><b>Nº DA NOTA:</b> '+safe(num)+'<br><b>REFERÊNCIA FISCAL:</b> '+safe($('scNoteFiscal').value||'Não informada')+'</p><p><b>DATA:</b> '+safe(dateBR)+'<br><b>MOTORISTA:</b> '+safe(driver)+'</p><h3>DADOS DOS PRODUTOS</h3><table><thead><tr><th>Produto</th><th>Descrição</th><th>Quantidade</th><th>Peso unit. (kg)</th><th>Peso total (kg)</th><th>Volume (m³)</th><th>Embalagem</th></tr></thead><tbody><tr><td>'+safe($('scNoteProduct').value)+'</td><td>'+safe($('scNoteDescription').value)+'</td><td>'+qty.toLocaleString('pt-BR')+'</td><td>'+unit.toLocaleString('pt-BR')+'</td><td>'+total.toLocaleString('pt-BR')+'</td><td>'+safe($('scNoteVolume').value)+'</td><td>'+safe($('scNotePackaging').value)+'</td></tr></tbody></table><h3>RESUMO DA ENTREGA</h3><p>Quantidade total de volumes: '+qty.toLocaleString('pt-BR')+'<br>Peso bruto total: '+total.toLocaleString('pt-BR')+' kg<br>Peso líquido total: '+total.toLocaleString('pt-BR')+' kg<br>Volume total: '+safe($('scNoteVolume').value)+' m³</p><h3>ASSINATURAS</h3><div class="sc-doc-sign"><div class="sc-doc-line">Responsável pela entrega (origem):<br><b>'+safe($('scNoteOrigin').value)+'</b></div><div class="sc-doc-line">Recebido por (destino):<br><b>'+safe($('scNoteReceiver').value)+'</b></div></div><div class="sc-doc-line" style="max-width:230px">Data do recebimento: '+safe(dateBR)+'</div><div class="sc-doc-stamp">GESTÃO SANTA CLARA<br><small>LIBERAÇÃO AUTOMÁTICA</small><hr style="border:0;border-top:1px solid #176b3a">✓ NOTA LIBERADA<br><small>Boa viagem! 🙏</small></div></article>';
-  $('scNotePreview').style.display='block';$('scNotePrint').style.display='inline-block';$('scNoteMessage').textContent='Nota gerada. Use “Baixar nota / Salvar PDF” e escolha “Salvar como PDF” na impressão.';
+  $('scNotePreview').style.display='block';$('scNotePrint').style.display='inline-block';$('scNoteMessage').textContent='Nota gerada. Preparando envio automático ao Discord…';
+  try{
+   if(!window.scPublishNoteToDiscord) throw new Error('Integração Firebase ainda não carregou.');
+   if(!window.html2canvas) throw new Error('Não foi possível carregar o gerador de imagem.');
+   const article=$('scNotePreview').querySelector('.sc-note-doc');
+   await Promise.all(Array.from(article.querySelectorAll('img')).map(im=>im.complete?Promise.resolve():new Promise(resolve=>{im.onload=resolve;im.onerror=resolve;})));
+   const canvas=await window.html2canvas(article,{backgroundColor:'#ffffff',scale:1.35,useCORS:true,logging:false});
+   const dataUrl=canvas.toDataURL('image/jpeg',0.82);
+   const imageBase64=dataUrl.split(',')[1];
+   if(!imageBase64||imageBase64.length>5500000) throw new Error('A imagem da nota ficou muito grande. Tente gerar novamente.');
+   const note={type:$('scNoteType').value,driver:$('scNoteDriver').value.trim(),date:$('scNoteDate').value,destination:$('scNoteDestination').value,number:$('scNoteNumber').value,fiscal:$('scNoteFiscal').value,product:$('scNoteProduct').value,description:$('scNoteDescription').value,quantity:$('scNoteQty').value,unitWeight:$('scNoteUnitWeight').value,totalWeight:(Number($('scNoteQty').value)*Number($('scNoteUnitWeight').value)).toFixed(2),volume:$('scNoteVolume').value,packaging:$('scNotePackaging').value,receiver:$('scNoteReceiver').value};
+   const result=await window.scPublishNoteToDiscord({imageBase64,note});
+   $('scNoteMessage').textContent=result?.data?.alreadySent?'Esta nota já tinha sido enviada ao Discord.':'✅ Nota gerada e enviada ao Discord oficial! Você também pode baixar/salvar em PDF.';
+  }catch(err){console.error('Falha no envio da nota ao Discord:',err);const reason=err?.message||'erro desconhecido';$('scNoteMessage').textContent='Nota gerada, mas não foi enviada ao Discord: '+reason+'. Você ainda pode baixar/salvar em PDF.';}
+
  });
  $('scNotePrint').addEventListener('click',()=>window.print());
 })();
