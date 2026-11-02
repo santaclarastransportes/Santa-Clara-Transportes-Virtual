@@ -587,8 +587,28 @@ async function loadRankin(){
  [tripsBox,coinsBox,purchasesBox].forEach(x=>x.innerHTML='<p>Carregando...</p>');
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const draw=(box,rows,format)=>{if(!rows.length){box.innerHTML='<div class="scRankEmpty">Ainda não há dados suficientes para este ranking.</div>';return;}box.innerHTML=rows.slice(0,10).map((r,i)=>'<div class="scRankRow"><span class="scRankNum">'+(i+1)+'</span><span class="scRankName">'+esc(r.name)+'</span><span class="scRankValue">'+format(r.value)+'</span></div>').join('');};
+ const showPublished=async()=>{
+  const ids=['maisViagens','maisStacoins','maisCompras'];
+  const snaps=await Promise.all(ids.map(id=>getDoc(doc(db,'santaClaraRankings',id))));
+  const rows=snaps.map(s=>s.exists()&&Array.isArray(s.data().items)?s.data().items:[]);
+  draw(tripsBox,rows[0],v=>Number(v||0).toLocaleString('pt-BR')+' viagens');
+  draw(coinsBox,rows[1],v=>Number(v||0).toLocaleString('pt-BR')+' SC');
+  draw(purchasesBox,rows[2],v=>Number(v||0).toLocaleString('pt-BR')+' compras');
+  if(rows.every(r=>!r.length)) [tripsBox,coinsBox,purchasesBox].forEach(x=>x.innerHTML='<div class="scRankEmpty">O ranking ainda não foi publicado. Aguarde a atualização pelo administrador.</div>');
+ };
  try{
-  const [idsSnap,loadsSnap,balancesSnap,historySnap,adminsSnap]=await Promise.all([getDocs(collection(db,'santaClaraIds')),getDocs(collection(db,'santaClaraCargas')),getDocs(collection(db,'santaClaraBalances')),getDocs(query(collection(db,'santaClaraStacoinHistory'),where('tipo','==','compra_loja'))),getDocs(collection(db,'santaClaraAdmins'))]);
+  if(!auth.currentUser){[tripsBox,coinsBox,purchasesBox].forEach(x=>x.innerHTML='<div class="scRankEmpty">Entre na sua conta para visualizar os rankings.</div>');return;}
+  // Motoristas consultam somente os três documentos públicos, nunca os dados financeiros privados.
+  if(!isAdmin()){await showPublished();return;}
+
+  // O administrador calcula e publica apenas nome e pontuação/quantidade.
+  const [idsSnap,loadsSnap,balancesSnap,historySnap,adminsSnap]=await Promise.all([
+   getDocs(collection(db,'santaClaraIds')),
+   getDocs(collection(db,'santaClaraCargas')),
+   getDocs(collection(db,'santaClaraBalances')),
+   getDocs(query(collection(db,'santaClaraStacoinHistory'),where('tipo','==','compra_loja'))),
+   getDocs(collection(db,'santaClaraAdmins'))
+  ]);
   const names={},profiles={},adminUids=new Set([...(adminsSnap.docs||[]).map(d=>d.id)]),adminEmails=new Set([ADMIN_EMAIL.toLowerCase()]);
   idsSnap.forEach(d=>{const x=d.data()||{};profiles[d.id]=x;names[d.id]=x.apelido||x.nome||x.email||d.id;const role=String(x.cargo||x.funcao||x.role||'').toLowerCase();if(/admin|administrador/.test(role))adminUids.add(d.id);if(String(x.email||'').toLowerCase()===ADMIN_EMAIL.toLowerCase())adminUids.add(d.id);});
   balancesSnap.forEach(d=>{const x=d.data()||{};if(String(x.email||x.usuarioEmail||'').toLowerCase()===ADMIN_EMAIL.toLowerCase())adminUids.add(x.uid||d.id);const role=String(x.cargo||x.funcao||x.role||'').toLowerCase();if(/admin|administrador/.test(role))adminUids.add(x.uid||d.id);});
@@ -599,8 +619,14 @@ async function loadRankin(){
   const coinRows=coins.filter(x=>Number.isFinite(x.value)).sort((a,b)=>b.value-a.value);
   const purchases={};historySnap.forEach(d=>{const x=d.data()||{},uid=x.balanceUid||x.uid;if(isDriver(uid))purchases[uid]=(purchases[uid]||0)+1;});
   const purchaseRows=Object.keys(purchases).map(uid=>({name:names[uid]||uid,value:purchases[uid]})).sort((a,b)=>b.value-a.value);
-  draw(tripsBox,tripRows,v=>v.toLocaleString('pt-BR')+' viagens');draw(coinsBox,coinRows,v=>v.toLocaleString('pt-BR')+' SC');draw(purchasesBox,purchaseRows,v=>v.toLocaleString('pt-BR')+' compras');
- }catch(e){console.error('Erro ao carregar Rankin:',e);[tripsBox,coinsBox,purchasesBox].forEach(x=>x.innerHTML='<div class="scRankEmpty">Não foi possível carregar os dados. Confira as permissões de leitura do Firestore.</div>');}
+  const publicItems=rows=>rows.slice(0,10).map(r=>({name:String(r.name||'Motorista'),value:Number(r.value)||0}));
+  await Promise.all([
+   setDoc(doc(db,'santaClaraRankings','maisViagens'),{items:publicItems(tripRows),atualizadoEm:serverTimestamp()}),
+   setDoc(doc(db,'santaClaraRankings','maisStacoins'),{items:publicItems(coinRows),atualizadoEm:serverTimestamp()}),
+   setDoc(doc(db,'santaClaraRankings','maisCompras'),{items:publicItems(purchaseRows),atualizadoEm:serverTimestamp()})
+  ]);
+  await showPublished();
+ }catch(e){console.error('Erro ao carregar/publicar Rankin:',e);[tripsBox,coinsBox,purchasesBox].forEach(x=>x.innerHTML='<div class="scRankEmpty">Não foi possível carregar o ranking. Confira sua conexão e as regras do Firestore.</div>');}
 }
 
 function openView(id){const p=pages[id];if(!p)return;if(id==='admin'&&!isAdmin()){alert('Esta área é exclusiva do administrador. Entre com a conta autorizada.');openLogin();return;}document.getElementById('homePage').style.display='none';document.getElementById('subPage').classList.add('active');document.getElementById('viewTitle').textContent=p.title;const backBtn=document.querySelector('#subPage .viewHead .back');if(backBtn)backBtn.textContent=id==='loja'?'← VOLTAR PARA A CENTRAL':'← Voltar';document.getElementById('viewContent').innerHTML=p.html;document.getElementById('viewContent').dataset.page=id;if(id==='rankin')loadRankin();if(id==='skins'||id==='loja')loadSkins();if(id==='loja')loadBalances();if(id==='links')loadOfficialLinks();if(id==='moedas')loadBalances();if(id==='admin'){loadRegisteredDrivers();loadApplications();refreshAdminRoleList();loadColetivaDrivers();loadColetivasAdmin();}if(id==='cargas')loadCargas();if(id==='perfil')loadMyProfile();if(id==='id')loadMyId();if(id==='cnh')loadInternalCnh();window.scrollTo({top:0,behavior:'smooth'});}
