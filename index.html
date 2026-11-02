@@ -425,6 +425,19 @@ body{color:#111!important}
 </style>
 
 </head>
+
+<style id="scShopNotificationsCSS">
+#scShopNotify{position:fixed;right:18px;top:18px;z-index:100000;font-family:inherit}
+#scShopBell{width:48px;height:48px;border:1px solid #d7b64d;border-radius:50%;background:#064b2b;color:#fff;font-size:22px;box-shadow:0 5px 18px #0003;cursor:pointer;position:relative}
+#scShopBadge{position:absolute;right:-3px;top:-4px;background:#e53935;color:#fff;border-radius:20px;min-width:19px;height:19px;font:bold 11px Arial;display:none;align-items:center;justify-content:center;padding:0 4px}
+#scShopPanel{display:none;position:absolute;right:0;top:56px;width:min(330px,calc(100vw - 36px));max-height:360px;overflow:auto;background:#fff;color:#183b29;border:1px solid #dce7df;border-radius:15px;box-shadow:0 12px 35px #0003;padding:14px}
+#scShopPanel.open{display:block}#scShopPanel h3{margin:0 0 10px;font-size:16px;color:#07502d}
+.scShopNoticeItem{padding:10px 0;border-top:1px solid #e8eee9;font-size:13px;line-height:1.45}
+#scShopToast{position:fixed;z-index:100001;top:78px;left:50%;transform:translateX(-50%) translateY(-15px);width:min(480px,calc(100vw - 30px));background:#fff;color:#17452c;border:1px solid #a8d8b5;border-left:5px solid #16a34a;border-radius:13px;padding:14px 16px;box-shadow:0 10px 30px #0003;opacity:0;pointer-events:none;transition:.25s}
+#scShopToast.show{opacity:1;transform:translateX(-50%) translateY(0)}#scShopToast strong{display:block;margin-bottom:3px}
+@media(max-width:600px){#scShopNotify{top:10px;right:10px}#scShopBell{width:43px;height:43px}#scShopToast{top:62px}}
+</style>
+
 <body>
 
 <div id="scLoadingScreen" role="status" aria-live="polite" aria-label="Carregando Santa Clara Transportes">
@@ -525,12 +538,35 @@ body{color:#111!important}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, serverTimestamp, collection, addDoc, getDocs, getDoc, query, orderBy, where, updateDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, serverTimestamp, collection, addDoc, getDocs, getDoc, query, orderBy, where, updateDoc, deleteDoc, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 const firebaseConfig={apiKey:"AIzaSyCYw84UGiuoSVFw6866QN0edYf1qWliQJM",authDomain:"gtr-logistics.firebaseapp.com",projectId:"gtr-logistics",storageBucket:"gtr-logistics.firebasestorage.app",messagingSenderId:"27426100336",appId:"1:27426100336:web:e66d30bfaf3ee28a3d90b5",measurementId:"G-LHXJJM05LL"};
 const appFirebase=initializeApp(firebaseConfig);
 const auth=getAuth(appFirebase);
 const db=getFirestore(appFirebase);
+
+// Notificações em tempo real: quando o administrador publica um novo item na loja.
+let scShopFirstSnapshot=true;
+let scShopNotifications=[];
+let scShopUnread=0;
+let scShopToastTimer=null;
+function scShopBuildNotificationUI(){
+ if(document.getElementById('scShopNotify'))return;
+ const root=document.createElement('div');root.id='scShopNotify';root.innerHTML='<button id="scShopBell" type="button" aria-label="Notificações da loja">🔔<span id="scShopBadge">0</span></button><div id="scShopPanel"><h3>🔔 Novidades da loja</h3><div id="scShopNotificationList"><p style="font-size:13px;color:#667">Nenhuma novidade por enquanto.</p></div></div><div id="scShopToast"><strong>🛍️ Novidade na loja!</strong><span id="scShopToastText"></span></div>';
+ document.body.appendChild(root);
+ document.getElementById('scShopBell').addEventListener('click',()=>{const panel=document.getElementById('scShopPanel');panel.classList.toggle('open');scShopUnread=0;scShopUpdateBadge();});
+}
+function scShopUpdateBadge(){const b=document.getElementById('scShopBadge');if(!b)return;b.textContent=scShopUnread>9?'9+':String(scShopUnread);b.style.display=scShopUnread?'flex':'none';}
+function scShopShowToast(name){scShopBuildNotificationUI();const toast=document.getElementById('scShopToast');document.getElementById('scShopToastText').textContent='Um novo item foi adicionado: '+name;toast.classList.add('show');clearTimeout(scShopToastTimer);scShopToastTimer=setTimeout(()=>toast.classList.remove('show'),6500);}
+function scShopRenderNotifications(){const list=document.getElementById('scShopNotificationList');if(!list)return;if(!scShopNotifications.length){list.innerHTML='<p style="font-size:13px;color:#667">Nenhuma novidade por enquanto.</p>';return;}list.innerHTML=scShopNotifications.slice(0,12).map(n=>'<div class="scShopNoticeItem"><strong>🛍️ Novo item na loja</strong><br>'+escapeHtml(n.nome)+'<br><small style="color:#718078">'+escapeHtml(n.quando)+'</small></div>').join('');}
+function scShopStartNotifications(){
+ scShopBuildNotificationUI();
+ onSnapshot(query(collection(db,'santaClaraSkins'),orderBy('criadoEm','desc')),(snap)=>{
+  if(scShopFirstSnapshot){scShopFirstSnapshot=false;return;}
+  snap.docChanges().forEach(change=>{if(change.type!=='added')return;const item=change.doc.data()||{};const nome=String(item.nome||'Novo item').slice(0,100);const data=item.criadoEm&&typeof item.criadoEm.toDate==='function'?item.criadoEm.toDate():new Date();scShopNotifications.unshift({nome,quando:data.toLocaleString('pt-BR')});scShopUnread++;scShopUpdateBadge();scShopRenderNotifications();scShopShowToast(nome);});
+ },err=>console.warn('Notificações da loja indisponíveis:',err));
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scShopStartNotifications,{once:true});else scShopStartNotifications();
 const functions=getFunctions(appFirebase, 'southamerica-east1');
 const ADMIN_EMAIL='gbzinxtreino@gmail.com';
 let currentAccount=null;
