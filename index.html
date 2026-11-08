@@ -371,6 +371,26 @@ body{color:#111!important}
 .scHistoryEmpty{padding:18px 12px;text-align:center;border:1px dashed #d7e1d8;border-radius:14px;color:#718075;font-size:12px;line-height:1.6}
 @media(max-width:430px){.scHistoryRow{gap:8px}.scHistoryIcon{width:34px;height:34px;flex-basis:34px}.scHistoryMain strong{font-size:12px}.scHistoryAmount{font-size:12px}}
 
+
+/* Correção de legibilidade e interação dos campos de formulário */
+#viewContent .field input,
+#viewContent .field select,
+#viewContent .field textarea {
+  background-color: #ffffff !important;
+  color: #183126 !important;
+  -webkit-text-fill-color: #183126 !important;
+  border-color: #b9c9bc !important;
+}
+#viewContent .field select option {
+  background-color: #ffffff !important;
+  color: #183126 !important;
+}
+#viewContent .btnGold {
+  color: #183126 !important;
+}
+#viewContent .back {
+  color: #183126 !important;
+}
 </style>
 
 <style>
@@ -709,7 +729,7 @@ let coletivaDriversCache=[];
 window.loadColetivaDrivers=async function(){const box=document.getElementById('coletivaDrivers');if(!box)return;if(!isAdmin()){box.textContent='Acesso exclusivo ao administrador.';return;}box.innerHTML='<p>Carregando motoristas...</p>';try{const snap=await getDocs(collection(db,'santaClaraIds'));coletivaDriversCache=[];snap.forEach(d=>{const x=d.data();if(String(x.cargo||'Motorista').toLowerCase().includes('admin'))return;coletivaDriversCache.push({uid:d.id,nome:x.apelido||x.nome||x.email||'Motorista',email:x.email||''});});coletivaDriversCache.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));if(!coletivaDriversCache.length){box.innerHTML='<p>Nenhum motorista cadastrado em santaClaraIds.</p>';return;}box.innerHTML='<strong>Motoristas que receberão a carga</strong><p style="font-size:12px">'+coletivaDriversCache.length+' motorista(s) receberão uma carga individual cada. Não é necessário atribuir notas.</p>'+coletivaDriversCache.map(d=>'<div style="padding:8px;border-bottom:1px solid #e3e9e3">🚚 '+escCarga(d.nome)+'</div>').join('');}catch(e){console.error(e);box.innerHTML='<p>Não foi possível listar motoristas. Confira as regras de santaClaraIds.</p>';}};
 window.criarCargasColetivas=async function(){const msg=document.getElementById('coletivaMsg');if(!isAdmin()){if(msg)msg.textContent='Somente administradores podem criar cargas coletivas.';return;}const origem=document.getElementById('coletivaOrigem')?.value||'',destino=document.getElementById('coletivaDestino')?.value||'',descricao=document.getElementById('coletivaDescricao')?.value.trim()||'';if(!origem||!destino||origem===destino){if(msg)msg.textContent='Escolha uma origem e um destino diferentes.';return;}if(!coletivaDriversCache.length){await loadColetivaDrivers();if(!coletivaDriversCache.length){if(msg)msg.textContent='Nenhum motorista disponível.';return;}}if(!confirm('Criar uma carga individual para cada um dos '+coletivaDriversCache.length+' motoristas?'))return;if(msg)msg.textContent='Criando cargas individuais...';const agora=new Date(),grupoId='SC-'+Date.now();let criadas=0;try{for(const d of coletivaDriversCache){await addDoc(collection(db,'santaClaraCargas'),{tipo:'coletiva',grupoColetivoId:grupoId,motoristaUid:d.uid,motoristaEmail:d.email,motoristasNome:d.nome,origem,destino,descricao,quantidadeNotas:1,status:'aguardando_aceite',criadoPor:auth.currentUser.email||'',criadoPorUid:auth.currentUser.uid,criadoEm:serverTimestamp(),criadoEmTexto:agora.toLocaleString('pt-BR'),criadoDia:scLocalDayKey(agora),expiraEm:scNextLocalMidnight(agora),finalizadoEm:null,finalizadoEmTexto:'',contabilizada:false});criadas++;}}catch(e){console.error(e);if(msg)msg.textContent='Foram criadas '+criadas+' cargas antes do erro. Confira as regras Firestore da coleção santaClaraCargas e tente atualizar a contagem.';await loadColetivasAdmin();return;}const texto='🚛 *SANTA CLARA TRANSPORTES — CARGAS COLETIVAS*\n\n📍 *Origem:* '+origem+'\n🏁 *Destino:* '+destino+'\n📦 *Mercadoria:* '+(descricao||'Conforme instruções da carga')+'\n👥 *Motoristas:* '+criadas+'\n\nCada motorista deve entrar no site, aceitar sua carga e finalizar individualmente.\nBoa viagem! 🍓🚚';if(msg)msg.textContent='Cargas criadas para '+criadas+' motoristas. Abrindo WhatsApp com o comunicado pronto; selecione o grupo e toque em Enviar.';window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank','noopener');await loadColetivasAdmin();};
 window.aceitarCargaColetiva=async function(id){if(!auth.currentUser){openLogin();return;}try{const ref=doc(db,'santaClaraCargas',id),snap=await getDoc(ref);if(!snap.exists())throw new Error('Carga não encontrada.');const d=snap.data();if(d.motoristaUid!==auth.currentUser.uid)throw new Error('Esta carga pertence a outro motorista.');if(d.status!=='aguardando_aceite')throw new Error('Esta carga já foi aceita ou finalizada.');if(!scCargaCriadaHoje(d))throw new Error('O prazo para aceitar esta carga terminou. O aceite só pode ser feito no dia em que ela foi criada.');const agora=new Date();await updateDoc(ref,{status:'em_andamento',aceitaEm:serverTimestamp(),aceitaEmTexto:agora.toLocaleString('pt-BR'),aceitaDia:scLocalDayKey(agora)});await loadCargas();}catch(e){console.error(e);alert('Não foi possível aceitar a carga: '+(e.message||'Confira as regras Firestore.'));}};
-window.loadColetivasAdmin=async function(){const resumo=document.getElementById('coletivasResumo'),list=document.getElementById('coletivasAdminList');if(!resumo||!list)return;if(!isAdmin()){resumo.textContent='Acesso restrito.';return;}try{const snap=await getDocs(collection(db,'santaClaraCargas'));const arr=[];snap.forEach(d=>{const x=d.data();if(x.tipo==='coletiva')arr.push({id:d.id,...x});});const grupos={};arr.forEach(x=>{const g=grupos[x.grupoColetivoId]||(grupos[x.grupoColetivoId]={id:x.grupoColetivoId,origem:x.origem,destino:x.destino,total:0,aceitas:0,finalizadas:0,notas:0,itens:[]});g.total++;g.notas+=Number(x.quantidadeNotas||1);if(x.status==='em_andamento')g.aceitas++;if(x.status==='finalizada')g.finalizadas++;g.itens.push(x);});const gs=Object.values(grupos).sort((a,b)=>b.id.localeCompare(a.id));resumo.innerHTML='<div class="adminStat"><strong>'+arr.length+'</strong><span>Atribuições</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='aguardando_aceite').length+'</strong><span>Aguardando aceite</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='em_andamento').length+'</strong><span>Em andamento</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='finalizada').length+'</strong><span>Finalizadas</span></div><div class="adminStat"><strong>'+arr.reduce((n,x)=>n+Number(x.quantidadeNotas||1),0)+'</strong><span>Notas atribuídas</span></div>';list.innerHTML='<div class="formActions"><button class="back" type="button" onclick="limparHistoricoColetivas()">🧹 LIMPAR HISTÓRICO DE CARGAS COLETIVAS</button></div>'+ (gs.length?gs.map(g=>`<article class="adminLoadItem"><strong>${escCarga(g.origem)} → ${escCarga(g.destino)}</strong><p>${escCarga(g.id)} · ${g.total} motoristas · ${g.notas} notas no total</p><div>Em andamento: ${g.aceitas} · Finalizadas: ${g.finalizadas} · Aguardando aceite: ${g.total-g.aceitas-g.finalizadas}</div><details><summary>Ver motoristas</summary>${g.itens.map(x=>`<p>${escCarga(x.motoristasNome||x.motoristaEmail||x.motoristaUid)} — ${Number(x.quantidadeNotas||1)} notas — ${x.status==='finalizada'?'Finalizada':x.status==='em_andamento'?'Aceita / em andamento':'Aguardando aceite'}</p>`).join('')}</details><div class="formActions"><button class="back" type="button" onclick="excluirGrupoColetivo(\'${escCarga(g.id)}\')">🗑️ EXCLUIR ESTE GRUPO</button></div></article>`).join(''):'<p>Nenhuma carga coletiva criada ainda.</p>';}catch(e){console.error(e);resumo.textContent='Não foi possível consultar. Verifique as regras de leitura da coleção santaClaraCargas.';list.innerHTML='';}};
+window.loadColetivasAdmin=async function(){const resumo=document.getElementById('coletivasResumo'),list=document.getElementById('coletivasAdminList');if(!resumo||!list)return;if(!isAdmin()){resumo.textContent='Acesso restrito.';return;}try{const snap=await getDocs(collection(db,'santaClaraCargas'));const arr=[];snap.forEach(d=>{const x=d.data();if(x.tipo==='coletiva')arr.push({id:d.id,...x});});const grupos={};arr.forEach(x=>{const g=grupos[x.grupoColetivoId]||(grupos[x.grupoColetivoId]={id:x.grupoColetivoId,origem:x.origem,destino:x.destino,total:0,aceitas:0,finalizadas:0,notas:0,itens:[]});g.total++;g.notas+=Number(x.quantidadeNotas||1);if(x.status==='em_andamento')g.aceitas++;if(x.status==='finalizada')g.finalizadas++;g.itens.push(x);});const gs=Object.values(grupos).sort((a,b)=>b.id.localeCompare(a.id));resumo.innerHTML='<div class="adminStat"><strong>'+arr.length+'</strong><span>Atribuições</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='aguardando_aceite').length+'</strong><span>Aguardando aceite</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='em_andamento').length+'</strong><span>Em andamento</span></div><div class="adminStat"><strong>'+arr.filter(x=>x.status==='finalizada').length+'</strong><span>Finalizadas</span></div><div class="adminStat"><strong>'+arr.reduce((n,x)=>n+Number(x.quantidadeNotas||1),0)+'</strong><span>Notas atribuídas</span></div>';list.innerHTML='<div class="formActions"><button class="back" type="button" onclick="limparHistoricoColetivas()">🧹 LIMPAR HISTÓRICO DE CARGAS COLETIVAS</button></div>'+ (gs.length?gs.map(g=>`<article class="adminLoadItem"><strong>${escCarga(g.origem)} → ${escCarga(g.destino)}</strong><p>${escCarga(g.id)} · ${g.total} motoristas · ${g.notas} notas no total</p><div>Em andamento: ${g.aceitas} · Finalizadas: ${g.finalizadas} · Aguardando aceite: ${g.total-g.aceitas-g.finalizadas}</div><details><summary>Ver motoristas</summary>${g.itens.map(x=>`<p>${escCarga(x.motoristasNome||x.motoristaEmail||x.motoristaUid)} — ${Number(x.quantidadeNotas||1)} notas — ${x.status==='finalizada'?'Finalizada':x.status==='em_andamento'?'Aceita / em andamento':'Aguardando aceite'}</p>`).join('')}</details><div class="formActions"><button class="back" type="button" onclick="excluirGrupoColetivo(\'${escCarga(g.id)}\')">🗑️ EXCLUIR ESTE GRUPO</button></div></article>`).join(''):'<p>Nenhuma carga coletiva criada ainda.</p>') ;}catch(e){console.error(e);resumo.textContent='Não foi possível consultar. Verifique as regras de leitura da coleção santaClaraCargas.';list.innerHTML='';}};
 function mostrarComprovanteCarga({registrado,valor=0,duracao=0,origem='',destino='',dataHora=new Date()}){
  const anterior=document.getElementById('scReceiptOverlay');if(anterior)anterior.remove();
  const data=dataHora.toLocaleDateString('pt-BR'),hora=dataHora.toLocaleTimeString('pt-BR');
@@ -1117,6 +1137,36 @@ window.depositSalary=window.depositSalary;
 window.setAdminRole=window.setAdminRole;
 window.login=window.login;
 window.addEventListener('click',async e=>{if(e.target&&e.target.id==='accountBtn'&&auth.currentUser){e.preventDefault();try{await signOut(auth);}catch(err){console.error(err);}}});
+// Compatibilidade: disponibiliza globalmente funções internas chamadas por onclick no HTML.
+window.scShopBuildNotificationUI=scShopBuildNotificationUI;
+window.scShopUpdateBadge=scShopUpdateBadge;
+window.scShopShowToast=scShopShowToast;
+window.scShopRenderNotifications=scShopRenderNotifications;
+window.scShopStartNotifications=scShopStartNotifications;
+window.isAdmin=isAdmin;
+window.loadRankin=loadRankin;
+window.getMyIdRecord=getMyIdRecord;
+window.escCarga=escCarga;
+window.dataCargaLabel=dataCargaLabel;
+window.scLocalDayKey=scLocalDayKey;
+window.scNextLocalMidnight=scNextLocalMidnight;
+window.scCargaCriadaHoje=scCargaCriadaHoje;
+window.scNormalizeCargaCode=scNormalizeCargaCode;
+window.mostrarComprovanteCarga=mostrarComprovanteCarga;
+window.scTimestampMs=scTimestampMs;
+window.scCategoryLockMs=scCategoryLockMs;
+window.scVehicleLockMs=scVehicleLockMs;
+window.scLockMessage=scLockMessage;
+window.scCategoryLockMessage=scCategoryLockMessage;
+window.wrapCanvasText=wrapCanvasText;
+window.drawPhoto=drawPhoto;
+window.renderRegisteredDrivers=renderRegisteredDrivers;
+window.loadBalances=loadBalances;
+window.loadStacoinDrivers=loadStacoinDrivers;
+window.refreshAdminRoleList=refreshAdminRoleList;
+window.processSalaryPayroll=processSalaryPayroll;
+window.escapeHtml=escapeHtml;
+window.loadSkins=loadSkins;
 </script>
 
 <nav class="sc-mobile-nav" aria-label="Atalhos principais do site">
